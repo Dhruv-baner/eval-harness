@@ -1,0 +1,1 @@
+`dataset.zip` is the generated dataset (8 synthetic firms, about 153k messy ledger rows, exact answer key). Unzip it here, or regenerate it with `python src/build.py`. See `README_data_dictionary.md` inside the zip for every file and column.

@@ -1,0 +1,271 @@
+# -*- coding: utf-8 -*-
+from datetime import date
+
+def std_tail(agent_ptax, desc_ptax, dep=True, loan=True, interest=True, card=True):
+    t = []
+    if card: t.append(('x_card_pay', {}))
+    t.append(('x_ptax', dict(agent=agent_ptax, desc=desc_ptax)))
+    if dep: t.append(('x_dep', {}))
+    if loan: t.append(('x_loan', dict(day=5)))
+    if interest: t.append(('x_interest', dict(mu=90)))
+    return t
+
+CLIENTS = []
+
+# 1. Dental group (US) - QuickBooks-style grouped GL
+CLIENTS.append(dict(
+    id='harborview_dental', pfx='HVD', name='Harborview Dental Group', industry='Dental practice (healthcare services)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=101, tax=0.0, input_tax=False,
+    fmt='qb', mess='med', codes='none', dstyle='mdY', num='comma', zero='blank',
+    ptax0=14000, ar0=118000, ap0=42000, fa0=640000, accdep0=210000, loan0=420000, loan_rate=.0675, loan_n=84,
+    cap0=250000, sav0=60000, cash_buf=45000, cust='payers', ap_vend='dental_supply',
+    label_over={'4100': ['Patient Revenue', 'Dental Services'], '5000': ['Dental Supplies', 'Clinical Supplies'],
+                '5300': ['Dental Lab Fees', 'Lab Fees'], '4900': ['Contractual Adjustments', 'Insurance Write-Offs']},
+    merged={'6210': 'Dues & Subscriptions', '6950': 'Dues & Subscriptions'}, uncat_label='Uncategorized Expense',
+    titles=['Harborview Dental Group', 'General Ledger', 'January through December 2025', ''],
+    mix=[
+        ('pos', dict(rate=15, mu=215, sigma=.85, rev='4100', fee=.027, desc=['Patient payment - card', 'Patient co-pay', 'POS patient visit'], cp='Patient', proc='Square')),
+        ('invoice', dict(rate=150, mu=430, sigma=.65, rev='4100', lag=28, lag_sd=9, short=.55, short_code='4900', baddebt=.01)),
+        ('bill', dict(rate=30, mu=620, sigma=.75, exp='5000', vend='dental_supply', lag=30)),
+        ('bill', dict(rate=24, mu=380, sigma=.5, exp='5300', vend='lab', lag=30)),
+        ('bill', dict(rate=6, mu=260, sigma=.6, exp='6200', vend='office', lag=25)),
+        ('card', dict(rate=25, mu=85, sigma=.7, exp='6200', vend='office')),
+        ('card', dict(rate=20, mu=65, sigma=.8, exp='6420', vend='meals')),
+        ('card', dict(rate=30, mu=140, sigma=.7, exp='6400', vend='marketing')),
+        ('card', dict(rate=18, mu=38, sigma=.4, exp='6210', vend='software')),
+        ('card', dict(rate=3, mu=420, sigma=.8, exp='6410', vend='travel')),
+        ('card', dict(rate=4, mu=120, sigma=.5, exp='6950', vend='software')),
+        ('direct', dict(rate=12, mu=55, sigma=.5, exp='6800', vend='bank')),
+        ('bill', dict(rate=5, mu=900, sigma=.8, exp='6600', vend='repairs', lag=20)),
+        ('recurring', dict(code='6100', day=1, mu=11500, sigma=0, via='bank', vend='rent', desc='Office rent')),
+        ('recurring', dict(code='6110', day=12, mu=1150, sigma=.18, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=18, mu=480, sigma=.06, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=10, mu=1800, sigma=0, via='bill', vend='accounting')),
+        ('recurring', dict(code='6300', day=22, mu=1500, sigma=.6, via='bill', vend='legal', every=3)),
+        ('prepaid', dict(mu=36000, vend='insurance')),
+        ('payroll', dict(freq='biweekly', mu=16500, sigma=.04, split=[('6000', .72, 'Clinical staff'), ('6000', .28, 'Front office')], ertax=.0765, ben=.06, wh=.22, agent='ADP Payroll')),
+        ('owner', dict(mu=9000, every=1, round=500)),
+        ('accrual', dict(code='6310', prob=.5, mu=2500, sigma=.3, round=100)),
+        ('refund', dict(rate=4, mu=140, sigma=.6)),
+        ('transfer', dict(rate=1.5, mu=15000, sigma=.5, round=1000)),
+    ] + std_tail('IRS EFTPS', 'Federal payroll tax deposit')))
+
+# 2. Organic DTC brand (UK) - Xero-style flat GL, non-calendar fiscal year
+CLIENTS.append(dict(
+    id='brightleaf_organics', pfx='BLO', name='Brightleaf Organics Ltd', industry='Organic food e-commerce + wholesale (UK, VAT)',
+    reg='UK', cur='GBP', lang='EN', fy0=date(2024, 4, 1), seed=102, tax=.20, input_tax=True, has_inv=True, inv_buf=15000,
+    fmt='xero', mess='high', codes='same', dstyle='dmY', num='comma', zero='blank', sort='account',
+    ptax0=6500, ar0=41000, ap0=33000, fa0=95000, accdep0=38000, loan0=80000, loan_rate=.075, loan_n=60,
+    cap0=60000, sav0=20000, cash_buf=12000, tax0=9500, ap_vend='wholesale',
+    season=[.95, .95, 1, 1, .95, .9, .9, 1, 1.05, 1.1, 1.35, 1.5], uncat_label='Uncategorised',
+    label_over={'4000': ['Online Sales', 'Sales - Shopify'], '5000': ['Cost of Sales', 'Purchases']},
+    merged={}, titles=['Brightleaf Organics Ltd', 'General Ledger', 'For the period 1 April 2024 to 31 March 2025', ''],
+    mix=[
+        ('pos', dict(rate=10, mu=74, sigma=.55, rev='4000', fee=.0195, weekend=True, desc=['Shopify order', 'Shopify payout - order', 'Web order'], ordno=True, cp='Shopify', cogs=.45, proc='Shopify Payments')),
+        ('invoice', dict(rate=20, mu=1400, sigma=.7, rev='4000', lag=35, lag_sd=12, baddebt=.015, cogs=.5)),
+        ('bill', dict(rate=12, mu=1700, sigma=.55, exp='5000', asset='1200', vend='wholesale', lag=30)),
+        ('bill', dict(rate=8, mu=600, sigma=.5, exp='5000', asset='1200', vend='packaging', lag=30)),
+        ('card', dict(rate=45, mu=14, sigma=.5, exp='5200', vend='freight')),
+        ('card', dict(rate=40, mu=110, sigma=.6, exp='6400', vend='marketing')),
+        ('card', dict(rate=25, mu=35, sigma=.4, exp='6210', vend='software')),
+        ('card', dict(rate=14, mu=28, sigma=.6, exp='6420', vend='meals')),
+        ('card', dict(rate=5, mu=95, sigma=.6, exp='6410', vend='travel')),
+        ('card', dict(rate=10, mu=40, sigma=.6, exp='6200', vend='office')),
+        ('direct', dict(rate=6, mu=18, sigma=.4, exp='6800', vend='bank', taxable=False)),
+        ('recurring', dict(code='6100', day=1, mu=2900, sigma=0, via='bank', vend='rent', desc='Unit rent')),
+        ('recurring', dict(code='6110', day=14, mu=420, sigma=.15, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=20, mu=95, sigma=.05, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=8, mu=550, sigma=0, via='bill', vend='accounting')),
+        ('prepaid', dict(mu=4200, vend='insurance')),
+        ('payroll', dict(freq='monthly', mu=8500, sigma=.04, split=[('6000', .6, 'Warehouse & fulfilment'), ('6000', .4, 'Admin & marketing')], ertax=.138, ben=.03, wh=.20, agent='HMRC PAYE')),
+        ('owner', dict(mu=3000, every=3, round=250, desc='Director dividend')),
+        ('accrual', dict(code='6310', prob=.4, mu=600, sigma=.3, round=50)),
+        ('refund', dict(rate=14, mu=34, sigma=.5)),
+        ('transfer', dict(rate=1, mu=5000, sigma=.4, round=500)),
+        ('x_tax', dict(desc='VAT payment to HMRC', agent='HMRC VAT', months=[5, 8, 11, 2], day=7)),
+    ] + std_tail('HMRC PAYE', 'PAYE and NI payment to HMRC')))
+
+# 3. Construction (US) - Sage-style signed amounts, repeated headers + subtotals
+CLIENTS.append(dict(
+    id='northgate_construction', pfx='NGC', name='Northgate Construction Inc', industry='Commercial construction (job costing)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=103, tax=0.0, input_tax=False,
+    fmt='sage', mess='high', codes='x10', dstyle='dmy_mon', num='comma', zero='blank',
+    ptax0=88000, ar0=2400000, ap0=1250000, fa0=3200000, accdep0=1450000, loan0=1800000, loan_rate=.071, loan_n=96,
+    cap0=500000, sav0=250000, cash_buf=400000, cust='biz', ncust=60, ap_vend='materials', uncat_label='Suspense',
+    label_over={'4100': ['Contract Revenue', 'Construction Income'], '5000': ['Job Costs - Materials', 'Materials'],
+                '5300': ['Job Costs - Subcontractors', 'Subcontractors'], '5100': ['Job Costs - Labor', 'Direct Labor'],
+                '6610': ['Vehicle & Equipment Fuel', 'Fuel']},
+    merged={'6410': 'Travel & Meals', '6420': 'Travel & Meals'}, titles=[],
+    mix=[
+        ('invoice', dict(rate=60, mu=36000, sigma=1.0, rev='4100', lag=45, lag_sd=20, baddebt=.012)),
+        ('bill', dict(rate=180, mu=2800, sigma=1.0, exp='5000', vend='materials', lag=30)),
+        ('bill', dict(rate=55, mu=14000, sigma=.9, exp='5300', vend='subcontract', lag=35)),
+        ('bill', dict(rate=10, mu=1900, sigma=.7, exp='6600', vend='repairs', lag=20)),
+        ('card', dict(rate=140, mu=185, sigma=.5, exp='6610', vend='fuel')),
+        ('card', dict(rate=30, mu=80, sigma=.7, exp='6420', vend='meals')),
+        ('card', dict(rate=10, mu=500, sigma=.7, exp='6410', vend='travel')),
+        ('card', dict(rate=20, mu=70, sigma=.6, exp='6200', vend='office')),
+        ('card', dict(rate=12, mu=45, sigma=.5, exp='6210', vend='software')),
+        ('direct', dict(rate=10, mu=45, sigma=.5, exp='6800', vend='bank')),
+        ('recurring', dict(code='6100', day=1, mu=18500, sigma=0, via='bank', vend='rent', desc='Yard & office lease')),
+        ('recurring', dict(code='6110', day=12, mu=2600, sigma=.2, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=18, mu=900, sigma=.06, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=10, mu=3500, sigma=0, via='bill', vend='accounting')),
+        ('recurring', dict(code='6300', day=22, mu=4500, sigma=.6, via='bill', vend='legal', every=2)),
+        ('prepaid', dict(mu=210000, vend='insurance')),
+        ('payroll', dict(freq='biweekly', mu=64000, sigma=.07, split=[('5100', .78, 'Field crews'), ('6000', .22, 'Office & PM staff')], ertax=.0765, ben=.09, wh=.21, agent='Paychex')),
+        ('owner', dict(mu=40000, every=3, round=1000, desc='Shareholder distribution')),
+        ('accrual', dict(code='5300', prob=.7, mu=45000, sigma=.4, round=500)),
+        ('transfer', dict(rate=1, mu=60000, sigma=.4, round=5000)),
+    ] + std_tail('EFTPS', 'Federal payroll tax deposit')))
+
+# 4. SaaS startup (US) - NetSuite-style, low messiness
+CLIENTS.append(dict(
+    id='lumen_software', pfx='LUM', name='Lumen Software Co', industry='B2B SaaS (subscriptions, deferred revenue)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=104, tax=0.0, input_tax=False,
+    fmt='netsuite', mess='low', codes='same', dstyle='iso', num='plain', zero='zero',
+    ptax0=40000, ar0=180000, ap0=95000, fa0=210000, accdep0=60000, loan0=0, loan_rate=.0, loan_n=60,
+    cap0=4500000, sav0=900000, cash_buf=300000, cust='biz', ncust=40, ap_vend='cloud', uncat_label='Suspense',
+    label_over={'4200': ['Subscription Revenue', 'SaaS Revenue'], '6210': ['Software & Subscriptions', 'Hosting & Software']},
+    merged={}, titles=[],
+    mix=[
+        ('subs', dict(n0=150, join=14, churn=.02, plans=[29, 29, 79, 79, 199, 499])),
+        ('annual', dict(rate=6, mu=1400, sigma=.6, lag=25, lag_sd=8, baddebt=.01)),
+        ('invoice', dict(rate=16, mu=6500, sigma=.7, rev='4200', lag=40, lag_sd=14, baddebt=.01)),
+        ('bill', dict(rate=12, mu=3000, sigma=.7, exp='6210', vend='cloud', lag=25)),
+        ('card', dict(rate=70, mu=48, sigma=.7, exp='6210', vend='software')),
+        ('card', dict(rate=40, mu=700, sigma=.9, exp='6400', vend='marketing')),
+        ('card', dict(rate=28, mu=380, sigma=.8, exp='6410', vend='travel')),
+        ('card', dict(rate=45, mu=62, sigma=.6, exp='6420', vend='meals')),
+        ('card', dict(rate=10, mu=75, sigma=.6, exp='6200', vend='office')),
+        ('direct', dict(rate=8, mu=35, sigma=.4, exp='6800', vend='bank')),
+        ('recurring', dict(code='6100', day=1, mu=24000, sigma=0, via='bank', vend='rent', desc='Office lease')),
+        ('recurring', dict(code='6310', day=12, mu=2800, sigma=0, via='bill', vend='accounting')),
+        ('recurring', dict(code='6300', day=20, mu=6500, sigma=.7, via='bill', vend='legal')),
+        ('recurring', dict(code='6120', day=18, mu=380, sigma=.05, via='bank', vend='telecom')),
+        ('prepaid', dict(mu=48000, vend='insurance')),
+        ('payroll', dict(freq='semimonthly', mu=62000, sigma=.03, split=[('6000', .7, 'Engineering'), ('6000', .3, 'GTM & G&A')], ertax=.0765, ben=.08, wh=.24, agent='Gusto')),
+        ('accrual', dict(code='6000', prob=.35, mu=30000, sigma=.4, round=1000)),
+        ('refund', dict(rate=6, mu=90, sigma=.6)),
+        ('transfer', dict(rate=1, mu=100000, sigma=.4, round=10000)),
+    ] + std_tail('IRS / state payroll', 'Payroll tax deposit', loan=False)))
+
+# 5. Law firm (US) - Xero-style flat but ISO dates, low messiness (control group)
+CLIENTS.append(dict(
+    id='alder_finch_llp', pfx='AFL', name='Alder & Finch LLP', industry='Law firm (professional services)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=105, tax=0.0, input_tax=False,
+    fmt='xero', mess='low', codes='same', dstyle='iso', num='plain', zero='blank', sort='account',
+    ptax0=52000, ar0=1150000, ap0=130000, fa0=420000, accdep0=180000, loan0=300000, loan_rate=.068, loan_n=60,
+    cap0=900000, sav0=300000, cash_buf=200000, cust='law', ncust=110, ap_vend='research', uncat_label='Suspense',
+    label_over={'4100': ['Professional Fees Income', 'Fees Earned'], '4900': ['Write-downs & Discounts', 'Discounts Given']},
+    merged={}, titles=['Alder & Finch LLP', 'General Ledger', 'Year ended 31 December 2025', ''],
+    mix=[
+        ('invoice', dict(rate=175, mu=2800, sigma=.9, rev='4100', lag=42, lag_sd=18, short=.12, short_code='4900', baddebt=.015)),
+        ('bill', dict(rate=14, mu=1100, sigma=.6, exp='6210', vend='research', lag=30)),
+        ('bill', dict(rate=10, mu=700, sigma=.6, exp='6200', vend='office', lag=25)),
+        ('card', dict(rate=60, mu=95, sigma=.7, exp='6420', vend='meals')),
+        ('card', dict(rate=35, mu=420, sigma=.9, exp='6410', vend='travel')),
+        ('card', dict(rate=25, mu=40, sigma=.5, exp='6210', vend='software')),
+        ('card', dict(rate=14, mu=60, sigma=.5, exp='5200', vend='freight')),
+        ('direct', dict(rate=8, mu=40, sigma=.4, exp='6800', vend='bank')),
+        ('recurring', dict(code='6100', day=1, mu=41000, sigma=0, via='bank', vend='rent', desc='Office lease')),
+        ('recurring', dict(code='6110', day=10, mu=3100, sigma=.15, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=18, mu=1250, sigma=.05, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=15, mu=3800, sigma=0, via='bill', vend='accounting')),
+        ('prepaid', dict(mu=95000, vend='insurance')),
+        ('payroll', dict(freq='semimonthly', mu=118000, sigma=.03, split=[('6000', .55, 'Attorneys'), ('6000', .45, 'Paralegals & staff')], ertax=.0765, ben=.1, wh=.25, agent='ADP Payroll')),
+        ('owner', dict(mu=60000, every=3, round=1000, desc='Partner distribution')),
+        ('accrual', dict(code='6000', prob=.25, mu=40000, sigma=.4, round=1000)),
+    ] + std_tail('IRS EFTPS', 'Payroll tax deposit')))
+
+# 6. Restaurants (US) - QuickBooks-style grouped GL; merged labels; tips
+CLIENTS.append(dict(
+    id='rivera_restaurants', pfx='RIV', name='Rivera Family Restaurants LLC', industry='Restaurant group (4 locations)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=106, tax=.0825, input_tax=False,
+    fmt='qb', mess='med', codes='none', dstyle='mdY', num='comma', zero='blank',
+    ptax0=36000, ar0=0, ap0=85000, fa0=1250000, accdep0=520000, loan0=680000, loan_rate=.0725, loan_n=84,
+    cap0=400000, sav0=80000, cash_buf=120000, cust='biz', ap_vend='food', uncat_label='Uncategorized Expense', tax0=48000,
+    season=[.85, .9, 1, 1, 1.05, 1.05, 1.05, 1.0, 1.0, 1.0, 1.0, 1.15],
+    label_over={'4000': ['Food & Beverage Sales', 'Restaurant Sales'], '2210': ['Tips Payable', 'Accrued Payroll'], '5100': ['Kitchen Labor', 'Direct Labor']},
+    merged={'6410': 'Travel & Meals', '6420': 'Travel & Meals', '5000': 'Cost of Sales - Food & Beverage', '5200': 'Cost of Sales - Food & Beverage'},
+    titles=['Rivera Family Restaurants LLC', 'General Ledger', 'January - December 2025', ''],
+    mix=[
+        ('pos', dict(batch=True, locs=4, locnames=['Downtown', 'Riverside', 'Airport Rd', 'Northside'], rate=1, mu=5300, sigma=.25, rev='4000', fee=.024, weekend=True, tips=.14, taxable=True, cp='POS', proc='Toast')),
+        ('bill', dict(rate=72, mu=2300, sigma=.6, exp='5000', vend='food', lag=14)),
+        ('bill', dict(rate=14, mu=2100, sigma=.5, exp='5000', vend='beverage', lag=21)),
+        ('bill', dict(rate=8, mu=650, sigma=.5, exp='5200', vend='freight', lag=20)),
+        ('bill', dict(rate=14, mu=800, sigma=.8, exp='6600', vend='repairs', lag=20)),
+        ('card', dict(rate=70, mu=70, sigma=.7, exp='6200', vend='office')),
+        ('card', dict(rate=25, mu=250, sigma=.7, exp='6400', vend='marketing')),
+        ('card', dict(rate=20, mu=60, sigma=.5, exp='6610', vend='fuel')),
+        ('card', dict(rate=10, mu=130, sigma=.6, exp='6410', vend='travel')),
+        ('card', dict(rate=15, mu=48, sigma=.5, exp='6210', vend='software')),
+        ('direct', dict(rate=12, mu=48, sigma=.5, exp='6800', vend='bank')),
+        ('recurring', dict(code='6100', day=1, mu=44000, sigma=0, via='bank', vend='rent', desc='Restaurant leases')),
+        ('recurring', dict(code='6110', day=12, mu=9400, sigma=.15, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=18, mu=1250, sigma=.05, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=10, mu=2400, sigma=0, via='bill', vend='accounting')),
+        ('prepaid', dict(mu=84000, vend='insurance')),
+        ('payroll', dict(freq='biweekly', mu=102000, sigma=.05, split=[('5100', .72, 'Kitchen & line staff'), ('6000', .28, 'Managers & FOH admin')], ertax=.0765, ben=.04, wh=.18, agent='Toast Payroll')),
+        ('owner', dict(mu=25000, every=1, round=500)),
+        ('accrual', dict(code='6310', prob=.4, mu=3000, sigma=.3, round=100)),
+        ('refund', dict(rate=4, mu=45, sigma=.6)),
+        ('transfer', dict(rate=1, mu=25000, sigma=.4, round=1000)),
+        ('x_tax', dict(desc='State sales tax remittance', agent='State Dept of Revenue', day=20)),
+        ('x_tips', {}),
+    ] + std_tail('IRS EFTPS', 'Federal payroll tax deposit')))
+
+# 7. Logistics (Germany) - EUR, German labels/number format, mojibake
+CLIENTS.append(dict(
+    id='kestrel_logistics', pfx='KES', name='Kestrel Logistics GmbH', industry='Road freight (Germany, VAT, EUR)',
+    reg='DE', cur='EUR', lang='DE', fy0=date(2025, 1, 1), seed=107, tax=.19, input_tax=True,
+    fmt='euro', mess='high', codes='skr', dstyle='dotted', num='eu', zero='blank', sort='date', moji=True,
+    ptax0=61000, ar0=1350000, ap0=420000, fa0=3800000, accdep0=1650000, loan0=2100000, loan_rate=.049, loan_n=84,
+    cap0=800000, sav0=150000, cash_buf=250000, tax0=95000, cust='biz', ncust=70, ap_vend='subcontract', uncat_label='Unklare Buchung',
+    label_over={}, merged={}, titles=[],
+    mix=[
+        ('invoice', dict(rate=200, mu=3400, sigma=.8, rev='4100', lag=38, lag_sd=15, baddebt=.012)),
+        ('bill', dict(rate=45, mu=2600, sigma=.8, exp='5300', vend='subcontract', lag=30)),
+        ('bill', dict(rate=16, mu=950, sigma=.8, exp='6600', vend='repairs', lag=20)),
+        ('card', dict(rate=170, mu=330, sigma=.5, exp='6610', vend='fuel')),
+        ('card', dict(rate=95, mu=85, sigma=.5, exp='5200', vend='toll')),
+        ('card', dict(rate=25, mu=70, sigma=.6, exp='6200', vend='office')),
+        ('card', dict(rate=14, mu=55, sigma=.5, exp='6210', vend='software')),
+        ('card', dict(rate=12, mu=48, sigma=.6, exp='6420', vend='meals')),
+        ('card', dict(rate=5, mu=260, sigma=.6, exp='6410', vend='travel')),
+        ('direct', dict(rate=8, mu=22, sigma=.4, exp='6800', vend='bank', taxable=False)),
+        ('recurring', dict(code='6100', day=1, mu=16500, sigma=0, via='bank', vend='rent', desc='Miete Betriebshof')),
+        ('recurring', dict(code='6110', day=14, mu=2300, sigma=.15, via='bank', vend='utility')),
+        ('recurring', dict(code='6120', day=18, mu=640, sigma=.05, via='bank', vend='telecom')),
+        ('recurring', dict(code='6310', day=10, mu=2400, sigma=0, via='bill', vend='accounting')),
+        ('recurring', dict(code='6500', day=3, mu=14500, sigma=.05, via='bank', vend='insurance', taxable=False, desc='Fahrzeugversicherung')),
+        ('payroll', dict(freq='monthly', mu=285000, sigma=.04, split=[('5100', .72, 'Fahrer'), ('6000', .28, 'Disposition & Verwaltung')], ertax=.21, ben=.0, wh=.27, agent='DATEV Lohn')),
+        ('owner', dict(mu=30000, every=3, round=1000, desc='Entnahme Gesellschafter')),
+        ('accrual', dict(code='6310', prob=.4, mu=3500, sigma=.3, round=100)),
+        ('x_tax', dict(desc='Umsatzsteuer-Voranmeldung', agent='Finanzamt Hamburg', day=10)),
+    ] + std_tail('Finanzamt / Krankenkassen', 'Lohnsteuer und Sozialabgaben')))
+
+# 8. Property holdings (US) - hand-kept Excel cash book
+CLIENTS.append(dict(
+    id='sunrise_property', pfx='SUN', name='Sunrise Property Holdings', industry='Residential rental portfolio (14 units)',
+    reg='US', cur='USD', lang='EN', fy0=date(2025, 1, 1), seed=108, tax=0.0, input_tax=False,
+    fmt='cashbook', mess='high', codes='none', dstyle='mdY', num='plain', zero='blank',
+    ptax0=0, ar0=0, ap0=0, fa0=1900000, accdep0=410000, loan0=1150000, loan_rate=.0585, loan_n=300,
+    cap0=500000, sav0=0, cash_buf=25000, cust='biz', ncust=10, ap_vend='repairs_prop', uncat_label='Misc',
+    label_over={}, merged={}, titles=[],
+    mix=[
+        ('rents', dict(units=14, mu=1650)),
+        ('direct', dict(rate=10, mu=380, sigma=.9, exp='6600', vend='repairs_prop', desc=None)),
+        ('direct', dict(rate=5, mu=55, sigma=.5, exp='6200', vend='office')),
+        ('direct', dict(rate=5, mu=14, sigma=.4, exp='6800', vend='bank')),
+        ('recurring', dict(code='6600', day=8, mu=650, sigma=.1, via='bank', vend='repairs_prop', desc='Landscaping & snow')),
+        ('recurring', dict(code='6600', day=22, mu=480, sigma=.1, via='bank', vend='repairs_prop', desc='Cleaning - common areas')),
+        ('direct', dict(rate=.5, mu=1900, sigma=.4, exp='1500', vend='repairs_prop')),
+        ('direct', dict(rate=3, mu=60, sigma=.6, exp='6990', vend='office')),
+        ('recurring', dict(code='6110', day=15, mu=410, sigma=.2, via='bank', vend='utility', desc='Common-area utilities')),
+        ('recurring', dict(code='6500', day=10, mu=4800, sigma=0, via='bank', vend='insurance', every=12, desc='Landlord insurance')),
+        ('recurring', dict(code='6130', day=5, mu=7400, sigma=0, via='bank', vend='rent', every=6, desc='County property tax')),
+        ('recurring', dict(code='6140', day=3, mu=1850, sigma=.05, via='bank', vend='propmgmt', desc='Management fee')),
+        ('recurring', dict(code='6310', day=20, mu=1400, sigma=0, via='bank', vend='accounting', every=12, offset=2, desc='Tax prep')),
+        ('x_loan', dict(day=1)),
+    ]))
