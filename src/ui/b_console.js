@@ -42,7 +42,7 @@ function renderIn() {
     h += `<td class="tg">${dup ? '<span class="tag">dup</span>' : ''}</td></tr>`;
   });
   $('cIn').innerHTML = h + '</tbody></table>';
-  $('cInMeta').textContent = `${c.rows.filter(r => r.kind === 'data').length} of ${num(c.base.n)} rows`;
+  $('cInMeta').textContent = `${c.rows.length} sample rows of ${num(c.base.n)} in the file`;
 }
 
 function whyMap(r, e) {
@@ -78,12 +78,13 @@ function renderOut() {
 function renderPipe() {
   const c = cd(), rows = c.rows, data = rows.filter(r => r.kind === 'data'), S = CON.stage;
   const eN = data.map(eff), auto = data.filter((r, i) => !r.dup && eN[i].auto).length;
-  const stat = [`${rows.length - data.length} rows skipped, ${data.length} data`, `${data.filter(r => r.tags.some(t => /^(date|amount|credit|drcr|missing_date)/.test(t))).length} formats repaired`,
-    `${eN.filter(e => e.code).length} mapped, mean conf ${(eN.reduce((a, e) => a + e.conf, 0) / Math.max(1, data.length) * 100).toFixed(0)}%`, `${data.filter(r => r.dup).length} duplicates removed`,
-    `${new Set(data.filter(r => r.flag || r.fixed).map(r => r.ref)).size} entries flagged, ${data.filter(r => r.fixed).length} signs fixed`, `${auto} auto, ${data.filter(r => !r.dup).length - auto} to review`];
-  $('cPipe').innerHTML = STAGES.map((n, i) => `<div class="st ${S > i ? 'done' : ''} ${CON.active === i + 1 ? 'act' : ''}"><div class="sn">0${i + 1}</div><div class="nm">${n}</div><div class="sx">${S > i ? stat[i] : ''}</div><div class="pg"><span></span></div></div>`).join('') +
-    '<div class="ks">R run<br>S step<br>X reset<br>U undo<br>Enter confirm<br>Esc close</div>';
-  if (CON.active) requestAnimationFrame(() => { const el = $('cPipe').querySelector('.st.act'); if (el) el.classList.add('go'); });
+  const stat = [`${rows.length - data.length} rows skipped, ${data.length} data rows`, `${data.filter(r => r.tags.some(t => /^(date|amount|credit|drcr|missing_date)/.test(t))).length} formats repaired`,
+    `${eN.filter(e => e.code).length} mapped, mean confidence ${(eN.reduce((a, e) => a + e.conf, 0) / Math.max(1, data.length) * 100).toFixed(0)}%`, `${data.filter(r => r.dup).length} duplicates removed`,
+    `${new Set(data.filter(r => r.flag || r.fixed).map(r => r.ref)).size} entries flagged, ${data.filter(r => r.fixed).length} signs fixed`, `${auto} accepted, ${data.filter(r => !r.dup).length - auto} to review`];
+  $('cPipe').innerHTML = STAGES.map((n, i) => `<div class="stp ${S > i ? 'done' : ''} ${CON.active === i + 1 ? 'act' : ''}"><div class="sn">0${i + 1}</div><div class="nm">${n}</div><div class="sx">${S > i ? stat[i] : ''}</div><div class="pg"><span></span></div></div>`).join('');
+  if (CON.active) requestAnimationFrame(() => { const el = $('cPipe').querySelector('.stp.act'); if (el) el.classList.add('go'); });
+  $('cNext').innerHTML = S >= 6 ? '<span>Pipeline complete.</span><button class="primary" id="goTeach">Next: teach the agent a label</button>' : (CON.running || CON.active ? '<span class="dim">Running.</span>' : S === 0 ? '<span class="dim">Press Run to start the pipeline.</span>' : '<span class="dim">Press Step to continue, or Run to finish.</span>');
+  if ($('goTeach')) $('goTeach').onclick = () => openTab('s01', 'teach');
 }
 function renderScore() {
   const t = totals(), S = CON.stage, b = cd().base;
@@ -97,23 +98,32 @@ function renderScore() {
 }
 function renderQueue() {
   const c = cd(), S = CON.stage;
-  if (S < 6) { $('cQ').innerHTML = `<div class="q"><div class="qh"><h3>Review queue</h3><span class="mono faint" style="font-size:.7rem">builds at stage 06</span></div></div>`; return; }
-  const open = labObj(CON.open || ''), items = c.labels.slice(0, CON.shown);
-  let h = `<div class="q"><div class="qh"><h3>Review queue <small>${c.labels.filter(l => !CON.mem[l.label]).length} unfamiliar labels</small></h3><span class="mono faint" style="font-size:.7rem">sorted by rows affected</span></div>`;
+  if (S < 6) {
+    $('cQ').innerHTML = '<div class="empty">Run the pipeline first. The queue lists labels the agent did not recognise, sorted by the number of rows each one affects.<div class="cta"><button class="primary" id="goRun">Run the pipeline</button></div></div>';
+    $('goRun').onclick = () => { openTab('s01', 'run'); conRun(false); }; renderConfirm(); return;
+  }
+  const items = c.labels.slice(0, CON.shown);
+  let h = `<div class="q"><div class="qh"><h3>Review queue <small>${c.labels.filter(l => !CON.mem[l.label]).length} unfamiliar labels</small></h3><span class="meta">sorted by rows affected</span></div>`;
   items.forEach(l => {
     const done = CON.mem[l.label], m = maj(l), e = effectOf(l, m);
-    h += `<div class="qi ${CON.open === l.label ? 'cur' : ''} ${done ? 'done' : ''}" data-l="${esc(l.label)}"><span class="ql">${esc(l.label)}</span><span class="n mono">${num(l.n)} rows</span><span class="n mono">${done ? 'confirmed ' + done.code : pts(e.dc / c.base.n) + ' pts'}</span><span class="qs">agent: ${l.pred ? esc(aname(l.pred)) + ' ' + (l.conf * 100).toFixed(0) + '%' : 'no suggestion'} / likely: ${esc(aname(m))}</span></div>`;
-    if (CON.open === l.label && !done) h += confirmBox(l);
+    h += `<div class="qi ${CON.open === l.label ? 'cur' : ''} ${done ? 'done' : ''}" data-l="${esc(l.label)}"><span class="ql">${esc(l.label)}</span><span class="qr">${num(l.n)} rows<br>${done ? 'confirmed ' + done.code : pts(e.dc / c.base.n) + ' pts if confirmed'}</span><span class="qs">Agent suggests ${l.pred ? esc(aname(l.pred)) + ' at ' + (l.conf * 100).toFixed(0) + '% confidence' : 'nothing'}. Most rows belong to ${esc(aname(m))}.</span></div>`;
   });
-  if (c.labels.length > CON.shown) h += `<div class="qi" id="qMore"><span class="ql">show ${Math.min(14, c.labels.length - CON.shown)} more</span></div>`;
+  if (c.labels.length > CON.shown) h += '<div class="qi" id="qMore"><span class="ql">Show more labels</span></div>';
   $('cQ').innerHTML = h + '</div>';
-  $('cQ').querySelectorAll('.qi[data-l]').forEach(q => q.onclick = ev => { if (ev.target.closest('.cf-box')) return; if (CON.mem[q.dataset.l]) return; CON.open = CON.open === q.dataset.l ? null : q.dataset.l; renderQueue(); const i = $('cfIn'); if (i) i.focus(); });
+  $('cQ').querySelectorAll('.qi[data-l]').forEach(q => q.onclick = () => { if (CON.mem[q.dataset.l]) return; CON.open = CON.open === q.dataset.l ? null : q.dataset.l; renderQueue(); const i = $('cfIn'); if (i) i.focus(); });
   const mo = $('qMore'); if (mo) mo.onclick = () => { CON.shown += 14; renderQueue(); };
-  if ($('cfIn')) { $('cfIn').oninput = updateEff; $('cfIn').onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); confirmOpen(); } if (ev.key === 'Escape') { CON.open = null; renderQueue(); } }; $('cfOk').onclick = confirmOpen; $('cfNo').onclick = () => { CON.open = null; renderQueue(); }; updateEff(); }
+  renderConfirm();
 }
-function confirmBox(l) {
-  const m = maj(l);
-  return `<div class="cf-box"><div class="lbl">Confirm label <b class="mono">${esc(l.label)}</b></div><div class="row"><input type="text" id="cfIn" list="acctList" value="${esc(aname(m))} (${m})" style="min-width:260px;flex:1" aria-label="Account for this label"><button class="primary" id="cfOk">Confirm <kbd>Enter</kbd></button><button id="cfNo">Cancel <kbd>Esc</kbd></button></div><div class="eff" id="cfEff"></div></div>`;
+function renderConfirm() {
+  const l = labObj(CON.open || ''), c = cd();
+  if (!l || CON.stage < 6 || CON.mem[l.label]) { $('cConfirm').innerHTML = CON.stage < 6 ? '' : '<div class="cfp"><h3>Confirm a label</h3><p class="empty">Choose a label from the queue. One confirmation applies to every row in the file that carries it.</p></div>'; return; }
+  const m = maj(l), tot = Object.values(l.by_true).reduce((a, b) => a + b, 0), dist = Object.entries(l.by_true).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  $('cConfirm').innerHTML = `<div class="cfp"><h3>Confirm a label</h3><div class="big">${esc(l.label)}</div><div class="meta">${num(l.n)} rows in the file, ${money(l.amount, c.currency)} absolute amount</div>
+    <div class="dist">${dist.map(([k, v]) => `<div><span>${esc(aname(k))} <span class="faint mono" style="font-size:.7rem">${k}</span></span><b>${(v / l.n * 100).toFixed(0)}% of rows</b></div>`).join('')}</div>
+    ${dist.length > 1 && dist[1][1] / l.n > .1 ? '<p class="note">These rows belong to more than one account. Confirming one account will misplace the rest.</p>' : ''}
+    <div class="row"><input type="text" id="cfIn" list="acctList" value="${esc(aname(m))} (${m})" style="min-width:250px;flex:1" aria-label="Account for this label"><button class="primary" id="cfOk">Confirm <kbd>Enter</kbd></button><button id="cfNo">Cancel <kbd>Esc</kbd></button></div><div class="eff" id="cfEff"></div></div>`;
+  $('cfIn').oninput = updateEff; $('cfIn').onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); confirmOpen(); } if (ev.key === 'Escape') { CON.open = null; renderQueue(); } };
+  $('cfOk').onclick = confirmOpen; $('cfNo').onclick = () => { CON.open = null; renderQueue(); }; updateEff();
 }
 function parseAcct(s) {
   const m = /\((\d{4})\)/.exec(s); if (m && ACCT[m[1]]) return m[1];

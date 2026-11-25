@@ -1,5 +1,5 @@
 /* ===== 05 AUDIT TRAIL ===== */
-const AU = {cid: 'northgate_construction', sort: 'diff', open: null};
+const AU = {cid: 'northgate_construction', sort: 'diff', open: null, all: false};
 function srcBar(s, n) {
   if (!n) return '';
   const d = (s.dict || 0) / n * 96, f = (s.fuzzy || 0) / n * 96, m = (s.ml || 0) / n * 96;
@@ -9,10 +9,12 @@ function renderAudit() {
   const a = AUD[AU.cid], cur = a.currency, tie = x => Math.abs(x.diff) <= Math.max(1, 0.005 * Math.abs(x.truth));
   let list = a.accounts.filter(x => x.rows > 0 || Math.abs(x.truth) > .5);
   list = AU.sort === 'diff' ? list.slice().sort((p, q) => Math.abs(q.diff) - Math.abs(p.diff)) : list.slice().sort((p, q) => p.code.localeCompare(q.code));
-  const bad = list.filter(x => !tie(x)).length;
-  $('auHead').textContent = `${list.length} accounts, ${list.length - bad} tie out, ${bad} do not. Click an account for the rows behind it.`;
-  $('auTable').innerHTML = `<table class="t"><thead><tr><th>Account</th><th class="n">Cleaned</th><th class="n">True</th><th class="n">Difference</th><th class="n">Rows</th><th style="padding-left:18px">Source</th></tr></thead><tbody>${list.map(x => `<tr class="click ${AU.open === x.code ? 'sel' : ''}" data-c="${x.code}"><td><span class="mono faint" style="font-size:.68rem">${x.code}</span> ${esc(x.name)}</td><td class="n">${money(x.cleaned, cur)}</td><td class="n">${money(x.truth, cur)}</td><td class="n ${tie(x) ? 'faint' : 'red'}"><b>${tie(x) ? 'ties' : money(x.diff, cur)}</b></td><td class="n">${num(x.rows)}</td><td style="padding-left:18px">${srcBar(x.src, x.rows)}</td></tr>`).join('')}</tbody></table><div class="legend" style="margin-top:10px"><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${INK}"/></svg>dictionary</span><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${INK3}"/></svg>fuzzy</span><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${RED}"/></svg>classifier</span></div>`;
+  const bad = list.filter(x => !tie(x)).length, total = list.length;
+  if (!AU.all) { const keep = list.slice(0, 12); const sel = list.find(x => x.code === AU.open); if (sel && !keep.includes(sel)) keep.push(sel); list = keep; }
+  $('auHead').textContent = `${total} accounts, ${total - bad} tie out, ${bad} do not. Click an account for the rows behind it.`;
+  $('auTable').innerHTML = `<table class="t"><thead><tr><th>Account</th><th class="n">Cleaned</th><th class="n">True</th><th class="n">Difference</th><th class="n">Rows</th><th style="padding-left:18px">Source</th></tr></thead><tbody>${list.map(x => `<tr class="click ${AU.open === x.code ? 'sel' : ''}" data-c="${x.code}"><td><span class="mono faint" style="font-size:.68rem">${x.code}</span> ${esc(x.name)}</td><td class="n">${money(x.cleaned, cur)}</td><td class="n">${money(x.truth, cur)}</td><td class="n ${tie(x) ? 'faint' : 'red'}"><b>${tie(x) ? 'ties' : money(x.diff, cur)}</b></td><td class="n">${num(x.rows)}</td><td style="padding-left:18px">${srcBar(x.src, x.rows)}</td></tr>`).join('')}</tbody></table><div style="margin-top:24px"><button id="auAll">${AU.all ? 'Show the largest 12' : 'Show all ' + total + ' accounts'}</button></div><div class="legend" style="margin-top:20px"><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${INK}"/></svg>dictionary</span><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${INK3}"/></svg>fuzzy</span><span><svg width="12" height="8" style="display:inline-block;width:12px;height:8px"><rect width="12" height="8" fill="${RED}"/></svg>classifier</span></div>`;
   $('auTable').querySelectorAll('tr.click').forEach(tr => tr.onclick = () => { AU.open = tr.dataset.c; renderAudit(); });
+  $('auAll').onclick = () => { AU.all = !AU.all; renderAudit(); };
   const d = a.accounts.find(x => x.code === AU.open);
   if (!d) { $('auDetail').innerHTML = '<p class="note">Select an account. The panel shows why the cleaned figure differs from the true one, and the raw rows behind it.</p>'; return; }
   const li = (arr, mode) => arr.length ? arr.map(g => `<div class="pr" style="grid-template-columns:1fr auto"><span><span class="mono" style="font-size:.7rem">${esc(g.label || 'blank')}</span><br><span class="faint" style="font-size:.7rem">${mode === 'in' ? 'belongs to ' + esc(aname(g.true)) : 'posted to ' + esc(aname(g.pred))}</span></span><span class="n mono" style="font-size:.72rem">${num(g.n)} rows<br>${money(g.amount, cur)}</span></div>`).join('') : '<p class="note" style="margin:0">None.</p>';
@@ -67,7 +69,7 @@ function drawEcon() {
 const LN = {c: 'hybrid', s: 'all'};
 function renderLearning() {
   tabs('lnSegC', [['hybrid', 'Hybrid'], ['rules', 'Rules']], LN.c, k => { LN.c = k; drawLearning(); }); tabs('lnSegS', [['all', 'All firms'], ['test', 'Test firms']], LN.s, k => { LN.s = k; drawLearning(); }); drawLearning();
-  $('lnCurve').innerHTML = legendHTML() + plot({w: 640, h: 330, xd: [0, Math.log10(1300)], yd: [.75, 1], xt: [0, 5, 10, 20, 40, 80, 160, 320, 640, 1280].map(v => Math.log10(1 + v)).filter(v => v <= Math.log10(1300)), xf: v => Math.round(Math.pow(10, v) - 1), yt: [.75, .8, .85, .9, .95, 1], yf: v => pct(v, 0), xl: 'Labels a reviewer has confirmed (log scale)', yl: 'Account accuracy', aria: 'accuracy after reviewing labels',
+  $('lnCurve').innerHTML = legendHTML() + plot({w: 560, h: 330, xd: [0, Math.log10(1300)], yd: [.75, 1], xt: [0, 5, 10, 20, 40, 80, 160, 320, 640, 1280].map(v => Math.log10(1 + v)).filter(v => v <= Math.log10(1300)), xf: v => Math.round(Math.pow(10, v) - 1), yt: [.75, .8, .85, .9, .95, 1], yf: v => pct(v, 0), xl: 'Labels a reviewer has confirmed (log scale)', yl: 'Account accuracy', aria: 'accuracy after reviewing labels',
     series: CL.map(n => ({k: n, label: CS[n].name, dots: true, r: 3.5, pts: M(n, 'test').review_curve.map(c => [Math.log10(1 + c.labels_reviewed), c.accuracy])}))});
 }
 function drawLearning() {
@@ -76,8 +78,8 @@ function drawLearning() {
   const sty = [{c: INK3, dash: '6 4', w: 2.4, l: 'no memory', m: 'sqo'}, {c: RED, dash: '', w: 3.4, l: 'memory', m: 'cir'}, {c: INK, dash: '9 3 2 3', w: 2.4, l: 'memory + audit', m: 'dia'}];
   const mkS = i => P[i].map((k, j) => ({pts: f(k), color: sty[j].c, dash: sty[j].dash, w: sty[j].w, label: sty[j].l, dots: j > 0, m: sty[j].m, r: 3.5}));
   const ym = Math.ceil(Math.max(...d.map(m => m.rev_base / m.n)) * 20) / 20 + .02, wm = Math.max(...d.map(m => Math.max(m.wrong_mem, m.wrong_audit, m.wrong_base) / m.n)) * 1.15;
-  $('lnRev').innerHTML = plot({w: 640, h: 320, endLabels: true, m: {r: 120}, xd: [1, 12], yd: [0, ym], xt: [1, 3, 6, 9, 12], xf: v => 'M' + v, yt: [0, ym / 4, ym / 2, ym * .75, ym], yf: v => pct(v, 0), xl: 'Months since onboarding', yl: 'Rows sent to a reviewer', aria: 'review rate by month', series: mkS(0)});
-  $('lnWrong').innerHTML = plot({w: 640, h: 320, endLabels: true, m: {r: 120}, xd: [1, 12], yd: [0, wm], xt: [1, 3, 6, 9, 12], xf: v => 'M' + v, yt: [0, .25, .5, .75, 1].map(v => v * wm), yf: v => pct(v, 2), xl: 'Months since onboarding', yl: 'Accepted rows that are wrong', aria: 'uncaught mistakes by month', series: mkS(1)});
+  $('lnRev').innerHTML = plot({w: 560, h: 320, endLabels: true, m: {r: 120}, xd: [1, 12], yd: [0, ym], xt: [1, 3, 6, 9, 12], xf: v => 'M' + v, yt: [0, ym / 4, ym / 2, ym * .75, ym], yf: v => pct(v, 0), xl: 'Months since onboarding', yl: 'Rows sent to a reviewer', aria: 'review rate by month', series: mkS(0)});
+  $('lnWrong').innerHTML = plot({w: 560, h: 320, endLabels: true, m: {r: 120}, xd: [1, 12], yd: [0, wm], xt: [1, 3, 6, 9, 12], xf: v => 'M' + v, yt: [0, .25, .5, .75, 1].map(v => v * wm), yf: v => pct(v, 2), xl: 'Months since onboarding', yl: 'Accepted rows that are wrong', aria: 'uncaught mistakes by month', series: mkS(1)});
   const h = X.cold_start.hybrid.all.months, a = h[0], l = h[h.length - 1], row = (nm, r, w) => `<tr><td>${nm}</td><td class="n">${pct(a[r] / a.n)}</td><td class="n">${pct(l[r] / l.n)}</td><td class="n">${pct(l[w] / l.n, 2)}</td></tr>`;
   $('lnTable').innerHTML = `<table class="t"><thead><tr><th>Policy, hybrid, all firms</th><th class="n">Review M1</th><th class="n">Review M12</th><th class="n">Uncaught M12</th></tr></thead><tbody>${row('No memory', 'rev_base', 'wrong_base')}${row('Memory', 'rev_mem', 'wrong_mem')}${row('Memory + 5% audit', 'rev_audit', 'wrong_audit')}</tbody></table><p class="note">Memory removes about nine in ten reviews but lets mistakes through for labels that map to more than one account, such as Travel and Meals. Auditing 5% of remembered rows finds those labels and retires them.</p>`;
 }
@@ -97,7 +99,7 @@ function renderInspector() {
 function drawInspector() {
   const c = $('inC').value, o = $('inO').value, t = $('inT').value;
   const rows = X.inspector.filter(r => (!c || r.client === c) && (!t || (t === '__none' ? !r.tags.length : r.tags.some(x => x.split(':')[0] === t))) && (!o || (o === 'dup' ? r.dup : o === 'wrong' ? (!r.dup && r.preds.hybrid[0] !== r.truth.code) : (!r.dup && r.preds.hybrid[0] === r.truth.code))));
-  const per = 5, pages = Math.max(1, Math.ceil(rows.length / per)); INS.page = clamp(INS.page, 0, pages - 1);
+  const per = 3, pages = Math.max(1, Math.ceil(rows.length / per)); INS.page = clamp(INS.page, 0, pages - 1);
   $('inCount').textContent = `${rows.length} rows`; $('inPage').textContent = `${INS.page + 1} / ${pages}`; $('inPrev').disabled = INS.page === 0; $('inNext').disabled = INS.page >= pages - 1;
   $('inList').innerHTML = rows.slice(INS.page * per, INS.page * per + per).map(r => {
     const meta = X.headers[r.file][r.sheet] || Object.values(X.headers[r.file])[0], hd = meta.header || [], hl = {}; (r.hl || []).forEach(h => { if (h[0] >= 0) hl[h[0]] = 1; });
@@ -106,7 +108,7 @@ function drawInspector() {
     const pr = r.dup ? `<div class="pr"><b>Hybrid</b><span>${r.preds.hybrid[2] === 'dup' ? 'flagged as duplicate' : 'kept as a real row'}</span><span class="${r.preds.hybrid[2] === 'dup' ? 'ok' : 'no'}">${r.preds.hybrid[2] === 'dup' ? 'ok' : 'wrong'}</span></div>` :
       CL.map(k => { const p = r.preds[k], ok = p[0] === r.truth.code; return `<div class="pr"><b>${CS[k].name}</b><span>${p[0] ? esc(aname(p[0])) + ' <span class="mono faint" style="font-size:.68rem">' + p[0] + ' ' + (p[1] * 100).toFixed(0) + '%</span>' : '<span class="faint">unmapped</span>'}</span><span class="${ok ? 'ok' : 'no'}">${ok ? 'ok' : 'wrong'}</span></div>`; }).join('') +
       `<div class="pr"><b>Date</b><span class="mono">${esc(r.hyb_date) || 'none'}</span><span class="${dOk ? 'ok' : 'no'}">${dOk ? 'ok' : 'wrong'}</span></div><div class="pr"><b>Amount</b><span class="mono">${r.hyb_net == null ? 'none' : fa(r.hyb_net)}</span><span class="${nOk ? 'ok' : 'no'}">${nOk ? 'ok' : 'wrong'}</span></div>`;
-    return `<div class="ins"><div><div class="meta"><span>${esc(cname(r.client))}</span><span class="mono faint">row ${r.row}</span>${r.dup ? '<span class="tag">duplicate row</span>' : ''}${r.tags.map(tagChip).join('')}</div>${tbl}</div><div><div class="truth">Truth: ${esc(r.truth.name)} <span class="mono faint" style="font-size:.68rem">${r.truth.code}</span><br><span class="mono dim" style="font-size:.7rem;font-weight:500">${r.truth.date} / ${tn >= 0 ? 'debit' : 'credit'} ${fa(Math.abs(tn))}</span></div>${pr}</div></div>`;
+    return `<div class="ins"><div><div class="meta2"><span>${esc(cname(r.client))}</span><span class="mono faint">row ${r.row}</span>${r.dup ? '<span class="tag">duplicate row</span>' : ''}${r.tags.map(tagChip).join('')}</div>${tbl}</div><div><div class="truth">Truth: ${esc(r.truth.name)} <span class="mono faint" style="font-size:.68rem">${r.truth.code}</span><br><span class="mono dim" style="font-size:.7rem;font-weight:500">${r.truth.date} / ${tn >= 0 ? 'debit' : 'credit'} ${fa(Math.abs(tn))}</span></div>${pr}</div></div>`;
   }).join('') || '<p class="note">No rows match.</p>';
 }
 

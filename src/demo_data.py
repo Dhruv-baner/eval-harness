@@ -44,27 +44,25 @@ for m in man.itertuples():
                 wrong_auto=int(((o.conf >= T) & (o.pred_code != o.true_code)).sum()))
     # ---- sample windows (all from the first sheet)
     d0 = d[d.sheet == sheet0].reset_index(drop=True); pos = {n: i for i, n in enumerate(d0.row_number)}
-    picks = set(range(1, min(hdr_row + 3, 9)))
-    def around(rn, r=1):
-        i = pos[rn]; return {d0.row_number[j] for j in range(max(0, i - r), min(len(d0), i + r + 1))}
+    picks = set(range(1, min(hdr_row + 3, 6)))
     D0 = d0[d0.row_kind == 'data']
-    for lb in [x['label'] for x in labels[:4]]:
+    for lb in [x['label'] for x in labels[:3]]:
         c = D0[(D0.label_norm == lb) & (D0.is_duplicate == 0)]
-        if len(c): picks |= around(int(c.iloc[int(rng.integers(len(c)))].row_number))
+        for j in rng.permutation(len(c))[:2]: picks.add(int(c.iloc[int(j)].row_number))
     dups = D0[D0.is_duplicate == 1]
     if len(dups):
-        r = dups.iloc[int(rng.integers(len(dups)))]; picks |= around(int(r.row_number))
+        r = dups.iloc[int(rng.integers(len(dups)))]; picks.add(int(r.row_number))
         orig = D0[(D0.line_id == r.line_id) & (D0.is_duplicate == 0)]
-        if len(orig): picks |= {int(orig.iloc[0].row_number)}
+        if len(orig): picks.add(int(orig.iloc[0].row_number))
     fl = D0[(D0.flag_unbalanced == True) | (D0.flip_repaired == True)] if 'flag_unbalanced' in D0 else D0.iloc[0:0]
     if len(fl):
-        r = fl.iloc[int(rng.integers(len(fl)))]; picks |= set(int(x) for x in D0[(D0.ref_key == r.ref_key)].row_number.head(6))
-    for tag in ('uncategorized_label', 'missing_account', 'date_alt_format', 'credit_as_negative_debit', 'amount_format', 'missing_date', 'sign_flip'):
-        c = D0[D0.tags.map(lambda t, tag=tag: any(x.split(':')[0] == tag for x in t))]
-        if len(c): picks |= around(int(c.iloc[int(rng.integers(len(c)))].row_number), 0)
+        r = fl.iloc[int(rng.integers(len(fl)))]; picks |= set(int(x) for x in D0[(D0.ref_key == r.ref_key)].row_number.head(4))
+    for tag in ('uncategorized_label', 'missing_account', 'date_alt_format', 'credit_as_negative_debit', 'amount_format', 'sign_flip'):
+        c = D0[D0.tags.map(lambda tg, tag=tag: any(x.split(':')[0] == tag for x in tg))]
+        if len(c): picks.add(int(c.iloc[int(rng.integers(len(c)))].row_number))
     junk = d0[(d0.row_kind.isin(['subtotal', 'section_total', 'section_header', 'repeat_header', 'grand_total'])) & (d0.row_number > hdr_row)]
-    if len(junk): picks |= around(int(junk.iloc[min(2, len(junk) - 1)].row_number), 1)
-    picks = sorted(p for p in picks if p in pos)[:46]
+    if len(junk): picks.add(int(junk.iloc[min(2, len(junk) - 1)].row_number))
+    picks = sorted(p for p in picks if p in pos)[:30]
     rows = []
     for rn in picks:
         r = d0.iloc[pos[rn]]; data = r.row_kind == 'data'
